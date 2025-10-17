@@ -39,3 +39,8 @@
 
 # debug information files
 *.dwo
+
+
+# poco
+poco_bin/
+poco_build/
