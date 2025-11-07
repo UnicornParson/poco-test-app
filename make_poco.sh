@@ -12,7 +12,7 @@ IFS=$'\n\t'
 # the build artifacts into the `poco_bin` directory.
 #
 # Usage:
-#   ./make_poco.sh [--clean] [--build-type Release|Debug] [--generator <CMakeGenerator>] [--jobs N]
+#   ./make_poco.sh [--clean] [--build-type Release|Debug] [--generator <CMakeGenerator>] [--jobs N] [--sanitize]
 #
 # Notes:
 # - This script attempts to enable all known Poco components via CMake flags.
@@ -24,6 +24,10 @@ IFS=$'\n\t'
 #   `CMAKE_INSTALL_PREFIX`.
 # - Works with single-config (Unix Makefiles, Ninja) and multi-config
 #   generators (MSVC). For multi-config, we pass `--config <type>`.
+# - When using --sanitize, AddressSanitizer (ASAN) and UndefinedBehaviorSanitizer
+#   (UBSAN) are enabled. This is useful for detecting memory errors and undefined
+#   behavior, but increases build time and binary size. It's recommended to use
+#   --build-type Debug with --sanitize for best results.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 POCO_SRC_DIR="${SCRIPT_DIR}/poco"
@@ -34,6 +38,7 @@ CLEAN=0
 BUILD_TYPE="Release"
 GENERATOR=""
 JOBS=""
+SANITIZE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -52,6 +57,10 @@ while [[ $# -gt 0 ]]; do
     --jobs|-j)
       JOBS="${2:-}"
       shift 2
+      ;;
+    --sanitize)
+      SANITIZE=1
+      shift
       ;;
     *)
       echo "Unknown option: $1" >&2
@@ -85,7 +94,23 @@ if [[ -z "${JOBS}" ]]; then
   fi
 fi
 
-echo "Configuring Poco (BUILD_TYPE=${BUILD_TYPE}, JOBS=${JOBS})..."
+# Sanitizers require debug symbols, so adjust build type if needed
+if [[ ${SANITIZE} -eq 1 ]] && [[ "${BUILD_TYPE}" == "Release" ]]; then
+  echo "Warning: Sanitizers work best with Debug build. Consider using --build-type Debug with --sanitize."
+fi
+
+SANITIZE_FLAGS=""
+if [[ ${SANITIZE} -eq 1 ]]; then
+  # Enable AddressSanitizer and UndefinedBehaviorSanitizer
+  # -fsanitize=address: Enable AddressSanitizer (detects memory errors)
+  # -fsanitize=undefined: Enable UndefinedBehaviorSanitizer (detects undefined behavior)
+  # -fno-omit-frame-pointer: Keep frame pointers for better stack traces
+  # -g: Include debug information (required for meaningful sanitizer output)
+  SANITIZE_FLAGS="-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -g"
+  echo "Configuring Poco (BUILD_TYPE=${BUILD_TYPE}, JOBS=${JOBS}, SANITIZE=ASAN+UBSAN)..."
+else
+  echo "Configuring Poco (BUILD_TYPE=${BUILD_TYPE}, JOBS=${JOBS})..."
+fi
 
 # Common CMake options
 CMAKE_OPTS=(
@@ -98,6 +123,17 @@ CMAKE_OPTS=(
   -DENABLE_TESTS=OFF                # Skip tests for faster, leaner install
   -DENABLE_SAMPLES=OFF
 )
+
+# Add sanitizer flags if enabled
+if [[ ${SANITIZE} -eq 1 ]]; then
+  # Append sanitizer flags to CMAKE_CXX_FLAGS
+  # This ensures all targets are built with sanitizers
+  CMAKE_OPTS+=(-DCMAKE_CXX_FLAGS="${SANITIZE_FLAGS}")
+  CMAKE_OPTS+=(-DCMAKE_C_FLAGS="${SANITIZE_FLAGS}")
+  # Also set linker flags for sanitizers
+  CMAKE_OPTS+=(-DCMAKE_EXE_LINKER_FLAGS="${SANITIZE_FLAGS}")
+  CMAKE_OPTS+=(-DCMAKE_SHARED_LINKER_FLAGS="${SANITIZE_FLAGS}")
+fi
 
 # Attempt to enable all known Poco components. Adjust as needed if configuration fails.
 CMAKE_ENABLE_ALL=(

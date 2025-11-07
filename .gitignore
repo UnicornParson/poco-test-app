@@ -44,3 +44,10 @@
 # poco
 poco_bin/
 poco_build/
+
+# boost
+boost_bin/
+boost_build/
+
+# app
+build_app/

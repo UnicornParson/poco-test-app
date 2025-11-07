@@ -1,3 +1,6 @@
 [submodule "poco"]
 	path = poco
 	url = https://github.com/UnicornParson/poco-test.git
+[submodule "boost"]
+	path = boost
+	url = https://github.com/boostorg/boost.git
