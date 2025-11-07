@@ -7,12 +7,18 @@ enable_testing()
 
 # Example test executable
 add_executable(test_example
-    test_example.cpp
+    test_json.cpp
 )
 
 target_link_libraries(test_example
     PRIVATE
         Poco::Foundation
+        Poco::Util
+        Poco::XML
+        Poco::JSON
+        Poco::Net
+        Poco::Crypto
+        Poco::NetSSL
         Boost::headers
         Boost::unit_test_framework
         Boost::filesystem
